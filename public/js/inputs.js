@@ -59,6 +59,8 @@ inputsHandler._inputCardBody = (input) => {
     if (input.hasOwnProperty('width') &&
         input.hasOwnProperty('height')) details.push('<div><strong>Resized to:</strong> ' + prettyDimensions(input) + '</div>')
     if (input.hasOwnProperty('framerate')) details.push('<div><strong>Framerate:</strong> ' + Math.round(input.framerate) + '</div>')
+    if (input.hasOwnProperty('xpos') && input.hasOwnProperty('ypos')) details.push('<div><strong>Position on screen:</strong> ' + input.xpos + 'x' + input.ypos + '</div>')
+    if (input.hasOwnProperty('zorder')) details.push('<strong>Z-order:</strong> ' + input.zorder)
     if (input.hasOwnProperty('audio_channels')) details.push('<div><strong>Audio channels:</strong> ' + input.audio_channels + '</div>')
     if (input.hasOwnProperty('audio_rate')) details.push('<div><strong>Audio rate:</strong> ' + input.audio_rate + '</div>')
     if (input.hasOwnProperty('volume')) details.push('<div><strong>Volume:</strong> ' + (100 * input.volume) + '&#37;</div>')
@@ -113,6 +115,15 @@ inputsHandler._populateForm = function(input) {
         uriExamples = 'Enter a local or URL location of a JPG, PNG, or SVG file.'
     }
 
+    var positionBox = formGroup({
+        id: 'input-position',
+        label: 'Position (&lt;width&gt;x&lt;height&gt;)',
+        name: 'position',
+        type: 'text',
+        value: (input.xpos || 0) + 'x' + (input.ypos || 0),
+        help: 'In the format <samp>&lt;width&gt;x&lt;height&gt;</samp>. The default, <samp>0x0</samp>, puts it in the top-left corner.'
+    })
+
     const loopBox = formGroup({
         id: 'input-loop',
         type: 'checkbox',
@@ -128,6 +139,14 @@ inputsHandler._populateForm = function(input) {
         type: 'number',
         value: input.buffer_duration / GstSecond,
         help: 'Amount to buffer input, in seconds. Leave blank for default.'
+    })
+
+    var zOrderBox = formGroup({
+        id: 'input-zorder',
+        label: 'Z-order',
+        name: 'zorder',
+        type: 'number',
+        value: input.zorder || inputsHandler.getNextZorder()
     })
 
     const hostBox = formGroup({
@@ -160,6 +179,21 @@ inputsHandler._populateForm = function(input) {
         name: 'uri',
         type: 'text',
         value: input.uri || '',
+        help: uriExamples,
+    })
+    var uriRowAudio = formGroup({
+        id: 'input-uri-audio',
+        label: 'Audio Location (URI)',
+        name: 'uriAudio',
+        type: 'text',
+        value: input.uriAudio || '',
+    })
+    var uriRowVideo = formGroup({
+        id: 'input-uri-video',
+        label: 'Video Location (URI)',
+        name: 'uriVideo',
+        type: 'text',
+        value: input.uriVideo || '',
         help: uriExamples,
     })
 
@@ -225,6 +259,7 @@ inputsHandler._populateForm = function(input) {
     var isNew = !input.hasOwnProperty('id')
     if (isNew) {
         var options = {
+            'shm_client': 'shmsrc (for shared memory)',
             'uri': 'URI (for files, RTMP, RTSP and HLS)',
             'image': 'Image',
             'tcp_client': 'TCP Client (receive from a TCP server)',
@@ -256,33 +291,50 @@ inputsHandler._populateForm = function(input) {
     }
     else if (input.type === 'test_video') {
         form.append(patternBox);
+        form.append(positionBox);
         form.append(sizeBox);
+        form.append(zOrderBox);
     }
     else if (input.type === 'image') {
         if (isNew) form.append(uriRow);
+        form.append(positionBox);
         form.append(sizeBox);
+        form.append(zOrderBox);
     }
     else if (input.type === 'uri') {
         if (isNew) form.append(uriRow);
         form.append(loopBox);
+        form.append(positionBox);
         form.append(sizeBox);
+        form.append(zOrderBox);
         form.append(components.volumeInput(input.volume));
         form.append(bufferDuationBox)
     }
     else if (input.type === 'html') {
         if (isNew) form.append(uriRow);
+        form.append(positionBox);
         form.append(sizeBox);
+        form.append(zOrderBox);
     }
     else if (input.type === 'decklink') {
         if (isNew) form.append(device);
         if (isNew) form.append(mode);
         if (isNew) form.append(connection);
+        form.append(positionBox);
         form.append(sizeBox);
+        form.append(zOrderBox);
     }
     else if (input.type === 'tcp_client') {
         if (isNew) form.append(hostBox)
         if (isNew) form.append(portBox)
         if (isNew) form.append(containerBox)
+        form.append(components.volumeInput(input.volume))
+    }
+    //#sebastian added shm input
+    else if (input.type === 'shm_client') {
+        if (isNew) form.append(uriRowAudio)
+        if (isNew) form.append(uriRowVideo)
+        form.append(components.volumeInput(input.volume))
     }
     form.find('select[name="type"]').change(inputsHandler._handleNewFormType);
 }
@@ -295,7 +347,7 @@ inputsHandler._handleFormSubmit = function() {
     const input = isNew ? {} : inputsHandler.findById(id)
     const newProps = {}
 
-    fields = ['type', 'uri', 'position', 'dimensions', 'freq', 'volume', 'input_volume', 'pattern', 'wave', 'buffer_duration', 'host', 'port', 'container']
+    fields = ['type', 'uri','uriAudio','uriVideo', 'position', 'zorder', 'dimensions', 'freq', 'volume', 'input_volume', 'pattern', 'wave', 'buffer_duration', 'host', 'port', 'container']
     fields.forEach(function(f) {
         var input = form.find('[name="' + f + '"]')
         if (input && input.val() !== null && input.val() !== '') {
@@ -465,4 +517,12 @@ function prettyDuration(d) {
     var minutes = Math.floor(seconds/60)
     var justSeconds = seconds % 60
     return minutes + ':' + (justSeconds < 10 ? '0' : '') + justSeconds
+}
+
+inputsHandler.getNextZorder = function() {
+    maxZorder = 1
+    inputsHandler.items.forEach(i =>{
+        if (i.zorder && i.zorder >= maxZorder) maxZorder = i.zorder + 1
+    })
+    return maxZorder
 }
