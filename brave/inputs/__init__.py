@@ -5,6 +5,8 @@ from brave.inputs.image import ImageInput
 from brave.inputs.html import HTMLInput
 from brave.inputs.decklink import DecklinkInput
 from brave.inputs.tcp_client import TcpClientInput
+#sebastian added input for shm
+from brave.inputs.shm_client import ShmClientInput
 from brave.abstract_collection import AbstractCollection
 import brave.exceptions
 
@@ -30,6 +32,9 @@ class InputCollection(AbstractCollection):
             input = DecklinkInput(**args, collection=self)
         elif args['type'] == 'tcp_client':
             input = TcpClientInput(**args, collection=self)
+        #sebastian added input for shm
+        elif args['type'] == 'shm_client':
+            input = ShmClientInput(**args, collection=self)
         else:
             raise brave.exceptions.InvalidConfiguration(f"Invalid input type '{str(args['type'])}'")
 
